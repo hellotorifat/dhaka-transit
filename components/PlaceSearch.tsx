@@ -26,6 +26,7 @@ export default function PlaceSearch({
   const [items, setItems] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const lastText = useRef("");
 
   // keep the box in sync when the place is set from outside (map pin, GPS, swap)
@@ -42,6 +43,7 @@ export default function PlaceSearch({
     const q = text.trim();
     if (q.length < 2) {
       setItems([]);
+      setNote(null);
       return;
     }
     const t = setTimeout(async () => {
@@ -49,10 +51,17 @@ export default function PlaceSearch({
       try {
         const r = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
         const j = await r.json();
-        setItems(j.places ?? []);
+        if (!r.ok) {
+          setItems([]);
+          setNote(j.error ?? "Search failed");
+        } else {
+          setItems(j.places ?? []);
+          setNote((j.places ?? []).length === 0 ? "No places found. Try a nearby landmark or use the 📍 button to pin it on the map." : null);
+        }
         setOpen(true);
       } catch {
         setItems([]);
+        setNote("Search failed. Check your internet connection.");
       } finally {
         setBusy(false);
       }
@@ -108,6 +117,12 @@ export default function PlaceSearch({
       </div>
 
       {busy && <p className="mt-1 text-xs text-gray-400">Searching…</p>}
+
+      {open && note && items.length === 0 && (
+        <p className="absolute z-[1200] mt-1 w-full rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 shadow-lg">
+          {note}
+        </p>
+      )}
 
       {open && items.length > 0 && (
         <ul className="absolute z-[1200] mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">

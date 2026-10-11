@@ -11,30 +11,40 @@ export async function GET(req: NextRequest) {
 
   const token = process.env.MAPBOX_TOKEN;
   if (!token) {
-    return NextResponse.json({ error: "MAPBOX_TOKEN missing" }, { status: 500 });
+    return NextResponse.json({ error: "MAPBOX_TOKEN is not set on the server" }, { status: 500 });
   }
 
-  const url = new URL("https://api.mapbox.com/search/geocode/v6/forward");
-  url.searchParams.set("q", q);
+  // v5 returns places of interest (shops, hospitals, landmarks...) as well as addresses
+  const url = new URL(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
+  );
   url.searchParams.set("country", "bd");
   url.searchParams.set("proximity", DHAKA_CENTER);
   url.searchParams.set("bbox", DHAKA_BBOX);
-  url.searchParams.set("limit", "5");
+  url.searchParams.set("autocomplete", "true");
+  url.searchParams.set("limit", "6");
   url.searchParams.set("access_token", token);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
-    return NextResponse.json({ error: "Mapbox error" }, { status: 502 });
+    return NextResponse.json(
+      { error: `Mapbox error ${res.status} (check MAPBOX_TOKEN)` },
+      { status: 502 }
+    );
   }
   const data = await res.json();
 
-  const places: Place[] = (data.features ?? []).map((f: any) => ({
-    id: f.id,
-    name: f.properties?.name ?? q,
-    address: f.properties?.place_formatted ?? "",
-    lng: f.geometry.coordinates[0],
-    lat: f.geometry.coordinates[1],
-  }));
+  const places: Place[] = (data.features ?? []).map((f: any) => {
+    const full: string = f.place_name ?? f.text ?? q;
+    const name: string = f.text ?? full.split(",")[0];
+    return {
+      id: f.id,
+      name,
+      address: full.startsWith(name) ? full.slice(name.length).replace(/^,\s*/, "") : full,
+      lng: f.center[0],
+      lat: f.center[1],
+    };
+  });
 
   return NextResponse.json({ places });
 }
